@@ -1,9 +1,9 @@
 import requests
-import json
 import jsonschema
 from jsonschema import validate
 import datetime
 from datetime import date
+import logging
 
 
 clist_schema = {
@@ -33,26 +33,35 @@ clist_schema = {
     },
 }
 
+favorite_contests = [
+    "codeforces.com",
+    "atcoder.jp",
+    "codechef.com",
+    "codingcompetitions.withgoogle.com",
+    "facebook.com",
+    "leetcode.com",
+]
+
 
 def validate_json(json_data):
+    logging.info("validate json data")
     try:
         validate(instance=json_data, schema=clist_schema)
     except jsonschema.exceptions.ValidationError as err:
-        print("[ERROR] invalid json data, error code:", err)
+        logging.error(f"invalid json data, error code: {err}")
         return False
     return True
 
 
-def fetch_data():
+def get_data_as_dict():
+    logging.info("start getting data from clist...")
     today = date.today()
     next_day = today + datetime.timedelta(weeks=1)
-    print(today)
-    print(next_day)
+    logging.info(f"get info from {today} to {next_day}")
 
     # must be in format YYYY-MM-DD HH:MM
     start_date_contest = today.strftime("%Y-%m-%d %H:%M")
     end_date_contest = next_day.strftime("%Y-%m-%d %H:%M")
-    print("today is ", start_date_contest)
 
     api_key = "2ca91832af218083a3e9ac413cdb2bbd4614e887"
     username = "Bingoblin"
@@ -71,7 +80,7 @@ def fetch_data():
     )
 
     if response.status_code != 200:
-        print("[ERROR] fetch error: ", response.status_code)
+        logging.error(f"fetch error: {response.status_code}")
         return
 
     json_data = response.json()
@@ -79,16 +88,10 @@ def fetch_data():
     if not validate_json(json_data):
         return
 
-    return json_data
+    result_dict = [
+        item for item in json_data["objects"] if item["host"] in favorite_contests
+    ]
 
+    # print(json.dumps(result_dict, indent=2))
 
-def main():
-    data = fetch_data()
-    if data is None:
-        print("Invalid data")
-    else:
-        print("Valid data")
-
-
-if __name__ == "__main__":
-    main()
+    return result_dict
