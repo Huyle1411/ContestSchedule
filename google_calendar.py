@@ -3,6 +3,7 @@ from __future__ import print_function
 import datetime
 import os.path
 import logging
+import pytz
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -18,7 +19,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 def init_log_config():
     logging.basicConfig(
-        filename="contest_log",
+        filename="/home/huyle/log/contest_schedule.txt",
         filemode="a",
         format="%(asctime)s [%(levelname)s][%(name)s]  %(message)s",
         datefmt="%H:%M:%S",
@@ -62,7 +63,14 @@ def get_upcomming_event(service):
         logging.error("Something wrong @@@ Return")
 
     try:
-        now = datetime.datetime.utcnow().isoformat() + "Z"  # 'Z' indicates UTC time
+        now = (
+            datetime.datetime.combine(
+                datetime.date.today(), datetime.datetime.min.time()
+            )
+            .utcnow()
+            .isoformat()
+            + "Z"
+        )  # 'Z' indicates UTC time
         logging.info("Getting the upcoming events")
         events_result = (
             service.events()
@@ -86,6 +94,55 @@ def get_upcomming_event(service):
     return events
 
 
+def check_same_contest(contest, exist_contest):
+    if not contest or not exist_contest:
+        logging.error("Invalid contest!!! Return")
+        return False
+
+    result = True
+    if str(contest["id"]) != str(exist_contest["id"]):
+        logging.info("Not match - id1: %s, id2: %s", contest["id"], exist_contest["id"])
+        result = False
+
+    if contest["event"] != exist_contest["summary"]:
+        logging.info(
+            "Not match - summary1: %s, summary2: %s",
+            contest["summary"],
+            exist_contest["summary"],
+        )
+        result = False
+
+    format_dt = "%Y-%m-%dT%H:%M:%S"
+    format_utc = "%Y-%m-%dT%H:%M:%S%z"
+    start_contest = datetime.datetime.strptime(contest["start"], format_dt)
+    start_exist_contest = datetime.datetime.strptime(
+        exist_contest["start"]["dateTime"], format_utc
+    )
+    start_contest = pytz.utc.localize(start_contest)
+    if start_contest != start_exist_contest:
+        logging.info(
+            "Not match - start_contest: %s, start_exist_contest: %s",
+            start_contest,
+            start_exist_contest,
+        )
+        result = False
+
+    end_contest = datetime.datetime.strptime(contest["end"], format_dt)
+    end_exist_contest = datetime.datetime.strptime(
+        exist_contest["end"]["dateTime"], format_utc
+    )
+    end_contest = pytz.utc.localize(end_contest)
+    if end_contest != end_exist_contest:
+        logging.info(
+            "Not match - end_contest: %s, end_exist_contest: %s",
+            end_contest,
+            end_exist_contest,
+        )
+        result = False
+
+    return result
+
+
 def create_event_contest(service):
     # fetch contest data from clist
     contest_info = fetch_data.get_data_as_dict()
@@ -95,38 +152,56 @@ def create_event_contest(service):
 
     calendar_events = get_upcomming_event(service)
 
-    if not calendar_events:
-        logging.info("Skip check duplicate events...")
-    # else:
-    # for new_contest in json_data:
-    # check duplicate event
+    # create event to calendar
+    for contest in contest_info:
+        match_id = False
+        match_contest = False
+        color_id = fetch_data.favorite_contests.index(contest["host"]) + 1
+        event_calendar = {
+            "id": contest["id"],
+            "summary": contest["event"],
+            "start": {"dateTime": contest["start"] + ".000000Z"},
+            "end": {"dateTime": contest["end"] + ".000000Z"},
+            "reminders": {
+                "useDefault": False,
+                "overrides": [{"method": "popup", "minutes": 30}],
+            },
+            "source": {
+                "url": contest["href"],
+                "title": contest["event"],
+            },
+            "colorId": str(color_id),
+        }
+        if not calendar_events:
+            logging.info("Skip check duplicate events...")
+        else:
+            for exist_contest in calendar_events:
+                if exist_contest["id"] == str(contest["id"]):
+                    logging.info("Found match id in calendar")
+                    match_id = True
+                    match_contest = check_same_contest(contest, exist_contest)
+                    break
 
-    # now = datetime.datetime.utcnow().isoformat() + "Z"  # 'Z' indicates UTC time
-    # test_event = {
-    #     "summary": "Hello World",
-    #     "location": "Hanoi",
-    #     "description": "Testing create event",
-    #     "start": {
-    #         "dateTime": start_time,
-    #     },
-    #     "end": {
-    #         "dateTime": end_time,
-    #     },
-    #     "reminders": {
-    #         "useDefault": False,
-    #         "overrides": [
-    #             {"method": "popup", "minutes": 5},
-    #         ],
-    #     },
-    # }
+        try:
+            if not match_id:
+                service.events().insert(
+                    calendarId="primary", body=event_calendar
+                ).execute()
 
-    # create_event_result = (
-    #     service.events().insert(calendarId="primary", body=test_event).execute()
-    # )
-    # logging.info("Event created: %s" % (create_event_result.get("htmlLink")))
-    # print("Event created: %s" % (create_event_result.get("htmlLink")))
+                logging.info("Event created")
+            elif not match_contest:
+                service.events().patch(
+                    calendarId="primary",
+                    eventId=exist_contest["id"],
+                    body=event_calendar,
+                ).execute()
 
-    # print("An error occurred: %s" % error)
+                logging.info("Event updated")
+            else:
+                logging.info("Completely match, no need to update")
+
+        except HttpError as error:
+            logging.error("An error occurred: %s" % error)
 
 
 def main():
