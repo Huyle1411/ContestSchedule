@@ -54,7 +54,23 @@ def create_service():
     return service
 
 
-def get_upcomming_event(service):
+def get_calendar_id(service):
+    page_token = None
+    while True:
+        calendar_list = service.calendarList().list(pageToken=page_token).execute()
+        for calendar_list_entry in calendar_list["items"]:
+            if calendar_list_entry["summary"] == "Programming":
+                logger.info("Found calendar id: %s", calendar_list_entry["id"])
+                return calendar_list_entry["id"]
+        page_token = calendar_list.get("nextPageToken")
+        if not page_token:
+            break
+
+    logger.error("Not found calendar id Return default id primary")
+    return "primary"
+
+
+def get_upcomming_event(service, calendar_id):
     if service is None:
         logger.error("Something wrong @@@ Return")
 
@@ -71,7 +87,7 @@ def get_upcomming_event(service):
         events_result = (
             service.events()
             .list(
-                calendarId="primary",
+                calendarId=calendar_id,
                 timeMin=now,
                 singleEvents=True,
                 orderBy="startTime",
@@ -161,7 +177,8 @@ def create_event_contest(service):
         logger.error("Data Error")
         return
 
-    calendar_events = get_upcomming_event(service)
+    calendar_id = get_calendar_id(service)
+    calendar_events = get_upcomming_event(service, calendar_id)
 
     # create event to calendar
     for contest in contest_info:
@@ -196,13 +213,13 @@ def create_event_contest(service):
         try:
             if not match_id:
                 service.events().insert(
-                    calendarId="primary", body=event_calendar
+                    calendarId=calendar_id, body=event_calendar
                 ).execute()
 
                 logger.info("Event created %s", contest["event"])
             elif not match_contest:
                 service.events().patch(
-                    calendarId="primary",
+                    calendarId=calendar_id,
                     eventId=exist_contest["id"],
                     body=event_calendar,
                 ).execute()
