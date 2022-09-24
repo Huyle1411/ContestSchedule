@@ -1,9 +1,10 @@
 import requests
+import json
 import jsonschema
 from jsonschema import validate
 import datetime
 from datetime import date
-import logging
+from logger import logger
 
 
 clist_schema = {
@@ -44,20 +45,20 @@ favorite_contests = [
 
 
 def validate_json(json_data):
-    logging.info("validate json data")
+    logger.info("validate json data")
     try:
         validate(instance=json_data, schema=clist_schema)
     except jsonschema.exceptions.ValidationError as err:
-        logging.error(f"invalid json data, error code: {err}")
+        logger.error(f"invalid json data, error code: {err}")
         return False
     return True
 
 
 def get_data_as_dict():
-    logging.info("start getting data from clist...")
+    logger.info("start getting data from clist...")
     today = date.today()
     next_day = today + datetime.timedelta(weeks=1)
-    logging.info(f"get info from {today} to {next_day}")
+    logger.info(f"get info from {today} to {next_day}")
 
     # must be in format YYYY-MM-DD HH:MM
     start_date_contest = today.strftime("%Y-%m-%d %H:%M")
@@ -80,18 +81,23 @@ def get_data_as_dict():
     )
 
     if response.status_code != 200:
-        logging.error(f"fetch error: {response.status_code}")
+        logger.error(f"fetch error: {response.status_code}")
         return
 
     json_data = response.json()
+
+    # logger.debug(json.dumps(json_data, indent=2))
 
     if not validate_json(json_data):
         return
 
     result_dict = [
-        item for item in json_data["objects"] if item["host"] in favorite_contests
+        item
+        for item in json_data["objects"]
+        if any(fav in item["host"] for fav in favorite_contests)
+        # if any(item["host"] in fav for fav in favorite_contests)
     ]
 
-    # print(json.dumps(result_dict, indent=2))
+    logger.debug(json.dumps(result_dict, indent=2))
 
     return result_dict

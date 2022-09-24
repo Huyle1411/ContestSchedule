@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import datetime
 import os.path
-import logging
+from logger import logger
 import pytz
 
 from google.auth.transport.requests import Request
@@ -11,6 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+
 import fetch_data
 
 # If modifying these scopes, delete the file token.json.
@@ -18,18 +19,8 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 PATH_CREDENTIALS = "/home/huyle/automation/creds_google_api/"
 
 
-def init_log_config():
-    logging.basicConfig(
-        filename="log/contest_schedule.txt",
-        filemode="a",
-        format="%(asctime)s [%(levelname)s][%(name)s]  %(message)s",
-        datefmt="%H:%M:%S",
-        level=logging.DEBUG,
-    )
-
-
 def create_service():
-    logging.info("check credentials")
+    logger.info("check credentials")
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -52,20 +43,20 @@ def create_service():
             token.write(creds.to_json())
 
     if creds is None:
-        logging.error("Failed to create credentials")
+        logger.error("Failed to create credentials")
         return
 
     try:
         service = build("calendar", "v3", credentials=creds)
     except HttpError as error:
-        logging.error("An error occurred: %s" % error)
+        logger.error("An error occurred: %s" % error)
 
     return service
 
 
 def get_upcomming_event(service):
     if service is None:
-        logging.error("Something wrong @@@ Return")
+        logger.error("Something wrong @@@ Return")
 
     try:
         now = (
@@ -76,7 +67,7 @@ def get_upcomming_event(service):
             .isoformat()
             + "Z"
         )  # 'Z' indicates UTC time
-        logging.info("Getting the upcoming events")
+        logger.info("Getting the upcoming events")
         events_result = (
             service.events()
             .list(
@@ -90,23 +81,23 @@ def get_upcomming_event(service):
         events = events_result.get("items", [])
 
         if not events:
-            logging.info("No upcoming events found.")
+            logger.info("No upcoming events found.")
             return
 
     except HttpError as error:
-        logging.error("An error occurred: %s" % error)
+        logger.error("An error occurred: %s" % error)
 
     return events
 
 
 def check_same_contest(contest, exist_contest):
     if not contest or not exist_contest:
-        logging.error("Invalid contest!!! Return")
+        logger.error("Invalid contest!!! Return")
         return False
 
     result = True
     if str(contest["id"]) != str(exist_contest["id"]):
-        logging.info(
+        logger.info(
             "Not match - contest id: %s, exist contest id: %s",
             contest["id"],
             exist_contest["id"],
@@ -114,7 +105,7 @@ def check_same_contest(contest, exist_contest):
         result = False
 
     if contest["event"] != exist_contest["summary"]:
-        logging.info(
+        logger.info(
             "Not match - contest summary: %s, exist contest summary: %s",
             contest["event"],
             exist_contest["summary"],
@@ -129,7 +120,7 @@ def check_same_contest(contest, exist_contest):
     )
     start_contest = pytz.utc.localize(start_contest)
     if start_contest != start_exist_contest:
-        logging.info(
+        logger.info(
             "Not match - start_contest: %s, start_exist_contest: %s",
             start_contest,
             start_exist_contest,
@@ -142,7 +133,7 @@ def check_same_contest(contest, exist_contest):
     )
     end_contest = pytz.utc.localize(end_contest)
     if end_contest != end_exist_contest:
-        logging.info(
+        logger.info(
             "Not match - end_contest: %s, end_exist_contest: %s",
             end_contest,
             end_exist_contest,
@@ -152,11 +143,22 @@ def check_same_contest(contest, exist_contest):
     return result
 
 
+def get_color(contest_host):
+    if contest_host is None:
+        logger.error("Invalid contest host, return default color id")
+        return 1
+    for idx, item in enumerate(fetch_data.favorite_contests):
+        if item in contest_host:
+            return idx + 1
+    logger.info("No match found, return default color id")
+    return 1
+
+
 def create_event_contest(service):
     # fetch contest data from clist
     contest_info = fetch_data.get_data_as_dict()
     if contest_info is None:
-        logging.error("Data Error")
+        logger.error("Data Error")
         return
 
     calendar_events = get_upcomming_event(service)
@@ -165,7 +167,7 @@ def create_event_contest(service):
     for contest in contest_info:
         match_id = False
         match_contest = False
-        color_id = fetch_data.favorite_contests.index(contest["host"]) + 1
+        color_id = get_color(contest["host"])
         event_calendar = {
             "id": contest["id"],
             "summary": contest["event"],
@@ -182,11 +184,11 @@ def create_event_contest(service):
             "colorId": str(color_id),
         }
         if not calendar_events:
-            logging.info("Skip check duplicate events...")
+            logger.info("Skip check duplicate events...")
         else:
             for exist_contest in calendar_events:
                 if exist_contest["id"] == str(contest["id"]):
-                    logging.info("Found match id in calendar")
+                    logger.info("Found match id in calendar")
                     match_id = True
                     match_contest = check_same_contest(contest, exist_contest)
                     break
@@ -197,7 +199,7 @@ def create_event_contest(service):
                     calendarId="primary", body=event_calendar
                 ).execute()
 
-                logging.info("Event created")
+                logger.info("Event created %s", contest["event"])
             elif not match_contest:
                 service.events().patch(
                     calendarId="primary",
@@ -205,16 +207,16 @@ def create_event_contest(service):
                     body=event_calendar,
                 ).execute()
 
-                logging.info("Event updated")
+                logger.info("Event updated %s", contest["event"])
             else:
-                logging.info("Completely match, no need to update")
+                logger.info("Completely match, no need to update %s", contest["event"])
 
         except HttpError as error:
-            logging.error("An error occurred: %s" % error)
+            logger.error("An error occurred: %s" % error)
 
 
 def main():
-    init_log_config()
+    # init_log_config()
     service = create_service()
     create_event_contest(service)
 
