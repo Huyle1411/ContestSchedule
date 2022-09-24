@@ -15,11 +15,12 @@ import fetch_data
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+PATH_CREDENTIALS = "/home/huyle/automation/creds_google_api/"
 
 
 def init_log_config():
     logging.basicConfig(
-        filename="/home/huyle/log/contest_schedule.txt",
+        filename="log/contest_schedule.txt",
         filemode="a",
         format="%(asctime)s [%(levelname)s][%(name)s]  %(message)s",
         datefmt="%H:%M:%S",
@@ -33,17 +34,21 @@ def create_service():
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists(PATH_CREDENTIALS + "token.json"):
+        creds = Credentials.from_authorized_user_file(
+            PATH_CREDENTIALS + "token.json", SCOPES
+        )
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                PATH_CREDENTIALS + "credentials.json", SCOPES
+            )
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open("token.json", "w") as token:
+        with open(PATH_CREDENTIALS + "token.json", "w") as token:
             token.write(creds.to_json())
 
     if creds is None:
@@ -101,13 +106,17 @@ def check_same_contest(contest, exist_contest):
 
     result = True
     if str(contest["id"]) != str(exist_contest["id"]):
-        logging.info("Not match - id1: %s, id2: %s", contest["id"], exist_contest["id"])
+        logging.info(
+            "Not match - contest id: %s, exist contest id: %s",
+            contest["id"],
+            exist_contest["id"],
+        )
         result = False
 
     if contest["event"] != exist_contest["summary"]:
         logging.info(
-            "Not match - summary1: %s, summary2: %s",
-            contest["summary"],
+            "Not match - contest summary: %s, exist contest summary: %s",
+            contest["event"],
             exist_contest["summary"],
         )
         result = False
