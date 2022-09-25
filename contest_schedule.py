@@ -112,48 +112,60 @@ def check_same_contest(contest, exist_contest):
         return False
 
     result = True
-    if str(contest["id"]) != str(exist_contest["id"]):
-        logger.info(
-            "Not match - contest id: %s, exist contest id: %s",
-            contest["id"],
-            exist_contest["id"],
-        )
-        result = False
+    try:
+        if str(contest["id"]) != str(exist_contest["id"]):
+            logger.info(
+                "Not match - contest id: %s, exist contest id: %s",
+                contest["id"],
+                exist_contest["id"],
+            )
+            result = False
 
-    if contest["event"] != exist_contest["summary"]:
-        logger.info(
-            "Not match - contest summary: %s, exist contest summary: %s",
-            contest["event"],
-            exist_contest["summary"],
-        )
-        result = False
+        if contest["event"] != exist_contest["summary"]:
+            logger.info(
+                "Not match - contest summary: %s, exist contest summary: %s",
+                contest["event"],
+                exist_contest["summary"],
+            )
+            result = False
 
-    format_dt = "%Y-%m-%dT%H:%M:%S"
-    format_utc = "%Y-%m-%dT%H:%M:%S%z"
-    start_contest = datetime.datetime.strptime(contest["start"], format_dt)
-    start_exist_contest = datetime.datetime.strptime(
-        exist_contest["start"]["dateTime"], format_utc
-    )
-    start_contest = pytz.utc.localize(start_contest)
-    if start_contest != start_exist_contest:
-        logger.info(
-            "Not match - start_contest: %s, start_exist_contest: %s",
-            start_contest,
-            start_exist_contest,
-        )
-        result = False
+        if contest["href"] != exist_contest["description"]:
+            logger.info(
+                "Not match - contest description: %s, exist contest description: %s",
+                contest["href"],
+                exist_contest["description"],
+            )
+            result = False
 
-    end_contest = datetime.datetime.strptime(contest["end"], format_dt)
-    end_exist_contest = datetime.datetime.strptime(
-        exist_contest["end"]["dateTime"], format_utc
-    )
-    end_contest = pytz.utc.localize(end_contest)
-    if end_contest != end_exist_contest:
-        logger.info(
-            "Not match - end_contest: %s, end_exist_contest: %s",
-            end_contest,
-            end_exist_contest,
+        format_dt = "%Y-%m-%dT%H:%M:%S"
+        format_utc = "%Y-%m-%dT%H:%M:%S%z"
+        start_contest = datetime.datetime.strptime(contest["start"], format_dt)
+        start_exist_contest = datetime.datetime.strptime(
+            exist_contest["start"]["dateTime"], format_utc
         )
+        start_contest = pytz.utc.localize(start_contest)
+        if start_contest != start_exist_contest:
+            logger.info(
+                "Not match - start_contest: %s, start_exist_contest: %s",
+                start_contest,
+                start_exist_contest,
+            )
+            result = False
+
+        end_contest = datetime.datetime.strptime(contest["end"], format_dt)
+        end_exist_contest = datetime.datetime.strptime(
+            exist_contest["end"]["dateTime"], format_utc
+        )
+        end_contest = pytz.utc.localize(end_contest)
+        if end_contest != end_exist_contest:
+            logger.info(
+                "Not match - end_contest: %s, end_exist_contest: %s",
+                end_contest,
+                end_exist_contest,
+            )
+            result = False
+    except KeyError:
+        logger.debug("Invalid key, return false")
         result = False
 
     return result
@@ -198,6 +210,7 @@ def create_event_contest(service):
                 "url": contest["href"],
                 "title": contest["event"],
             },
+            "description": contest["href"],
             "colorId": str(color_id),
         }
         if not calendar_events:
